@@ -1,2 +1,4 @@
 # One Pergamer product URL per line.
 https://pergamer.com/market/Patchwork%20Protector?game=570
+https://pergamer.com/market/Curse%20of%20the%20Wyrmbender?game=570
+https://pergamer.com/market/Direstone%20Desecration?game=570
