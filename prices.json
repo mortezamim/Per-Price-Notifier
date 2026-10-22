@@ -1,5 +1,15 @@
 {
   "products": {
+    "https://pergamer.com/market/Curse%20of%20the%20Wyrmbender?game=570": {
+      "name": "Curse of the Wyrmbender",
+      "price_irr": 7048800,
+      "updated_at": "2026-10-22T05:16:04.426206+00:00"
+    },
+    "https://pergamer.com/market/Direstone%20Desecration?game=570": {
+      "name": "Direstone Desecration",
+      "price_irr": 7769700,
+      "updated_at": "2026-10-22T05:16:08.739504+00:00"
+    },
     "https://pergamer.com/market/Patchwork%20Protector?game=570": {
       "name": "Patchwork Protector",
       "price_irr": 3551100,
