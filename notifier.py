@@ -308,6 +308,15 @@ def build_message(name: str, old_price: int, new_price: int, url: str) -> str:
     )
 
 
+def build_current_price_message(price: Price, url: str) -> str:
+    return (
+        "Current Pergamer price\n"
+        f"{html.escape(price.name)}\n"
+        f"Price: {format_money(price.irr)}\n"
+        f'<a href="{html.escape(url, quote=True)}">Open product</a>'
+    )
+
+
 def send_telegram(message: str, token: str, chat_id: str) -> None:
     if not token or not chat_id:
         raise NotifierError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required for alerts")
@@ -396,12 +405,12 @@ def main() -> int:
     args = parse_args()
     try:
         if args.test_telegram:
-            send_telegram(
-                "Per Price Notifier test\nTelegram delivery is working.",
-                os.environ.get("TELEGRAM_BOT_TOKEN", ""),
-                os.environ.get("TELEGRAM_CHAT_ID", ""),
-            )
-            print("telegram test: delivered")
+            token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+            chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+            for product in load_products(args.products):
+                price = scrape_price(product)
+                send_telegram(build_current_price_message(price, product.url), token, chat_id)
+                print(f"telegram current price: {price.name}: {price.irr} IRR")
             return 0
         products = load_products(args.products)
         if args.check_only:

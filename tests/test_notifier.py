@@ -132,23 +132,33 @@ class StateTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
+    @patch("notifier.scrape_price", return_value=notifier.Price("Patchwork Protector", 3551100))
     @patch("notifier.send_telegram")
     @patch("notifier.parse_args")
     @patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "token", "TELEGRAM_CHAT_ID": "-1001"})
-    def test_telegram_health_check(self, parse_args, send_telegram):
+    def test_telegram_health_check_sends_scraped_price(
+        self, parse_args, send_telegram, scrape_price
+    ):
         parse_args.return_value = type(
             "Args",
             (),
             {
                 "test_telegram": True,
                 "check_only": False,
-                "products": Path("unused"),
+                "products": Path("products.txt"),
                 "state": Path("unused"),
             },
         )()
         self.assertEqual(notifier.main(), 0)
+        scrape_price.assert_called_once()
         send_telegram.assert_called_once_with(
-            "Per Price Notifier test\nTelegram delivery is working.", "token", "-1001"
+            "Current Pergamer price\n"
+            "Patchwork Protector\n"
+            "Price: 3,551,100 IRR (355,110 toman)\n"
+            '<a href="https://pergamer.com/market/Patchwork%20Protector?game=570">'
+            "Open product</a>",
+            "token",
+            "-1001",
         )
 
 

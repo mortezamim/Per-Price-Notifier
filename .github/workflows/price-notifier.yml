@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       test_telegram:
-        description: "Send one Telegram delivery health-check message"
+        description: "Scrape and send current prices to Telegram"
         required: false
         default: false
         type: boolean
@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Verify Telegram delivery
+      - name: Verify scrape and Telegram delivery
         if: github.event_name == 'workflow_dispatch' && inputs.test_telegram == true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
