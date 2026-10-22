@@ -30,8 +30,18 @@ class ParserTests(unittest.TestCase):
         rates = [{"top_asset": "USDTCent", "bottom_asset": "IRT", "rate": "26700"}]
         self.assertEqual(notifier.convert_to_irr("133", "USDTCent", rates), 3551100)
 
-    def test_parses_rendered_irr(self):
-        self.assertEqual(notifier.parse_rendered_irr("۳٬۵۵۱٬۱۰۰ ریال"), 3551100)
+    @patch("notifier.read_json")
+    def test_wallex_rate_matches_site_rounding(self, read_json):
+        read_json.return_value = {
+            "result": {
+                "symbols": {
+                    "USDTTMN": {"stats": {"askPrice": "266758.0000000000000000"}}
+                }
+            }
+        }
+        rates = notifier.fetch_wallex_rates()
+        self.assertEqual(rates[0]["rate"], "26700")
+        self.assertEqual(notifier.convert_to_irr("133", "USDTCent", rates), 3551100)
 
 
 class StateTests(unittest.TestCase):

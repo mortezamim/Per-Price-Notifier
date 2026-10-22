@@ -8,9 +8,10 @@ orders, wallet access, or delivery-time logic.
 - Reads one product URL per line from [`products.txt`](products.txt).
 - Fetches active seller listings from Pergamer's public market API.
 - Uses Pergamer's public live asset-rate WebSocket to convert listing units to
-  Iranian rials (IRR), matching the site's displayed listing price. If Pergamer
-  blocks a runner's direct WebSocket client, headless Chrome reads the same first
-  rendered seller row as a browser.
+  Iranian rials (IRR), matching the site's displayed listing price. Pergamer
+  blocks WebSocket clients from GitHub-hosted runners, so those runs fall back
+  to Wallex's public live `USDTTMN` ask over HTTPS and apply Pergamer's observed
+  whole-thousand-toman quote rounding.
 - Selects the lowest active-seller price (the first row in the sorted lower
   **All active sellers** section). Headline/history prices and wallet balance
   are ignored.

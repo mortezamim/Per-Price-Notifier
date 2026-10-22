@@ -7,12 +7,11 @@ import argparse
 import html
 import json
 import os
-import re
 import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 from pathlib import Path
 from typing import Callable
 from urllib.error import HTTPError, URLError
@@ -23,6 +22,7 @@ from websockets.sync.client import connect
 
 API_BASE = "https://api.pergamer.com"
 WEBSOCKET_URL = "wss://api.pergamer.com/ws/user/"
+WALLEX_MARKETS_URL = "https://api.wallex.ir/v1/markets"
 SITE_ORIGIN = "https://pergamer.com"
 USER_AGENT = "Per-Price-Notifier/1.0 (+https://github.com/mortezamim/Per-Price-Notifier)"
 PERSIAN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
@@ -144,55 +144,25 @@ def fetch_rates(timeout: int = 15) -> list[dict[str, object]]:
     raise NotifierError("Asset-rate WebSocket returned no rates")
 
 
-def parse_rendered_irr(text: str) -> int:
-    normalized = normalize_number(text)
-    numbers = re.findall(r"[0-9]+", normalized)
-    if len(numbers) != 1:
-        raise NotifierError(f"Rendered listing price is invalid: {text!r}")
-    value = int(numbers[0])
-    if value <= 0:
-        raise NotifierError("Rendered listing price is not positive")
-    return value
-
-
-def scrape_rendered_price(product: Product, name: str, timeout: int = 45) -> Price:
-    """Read first rendered active-seller row through Chrome when WS clients are blocked."""
+def fetch_wallex_rates() -> list[dict[str, object]]:
+    """Mirror Pergamer's whole-thousand-toman USDT quote over runner-safe HTTPS."""
+    payload = read_json(WALLEX_MARKETS_URL)
     try:
-        from selenium import webdriver
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-    except ImportError as exc:
-        raise NotifierError("Selenium browser fallback is unavailable") from exc
-
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--lang=fa-IR")
-    options.add_argument("--window-size=1280,1200")
-    driver = None
-    try:
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(timeout)
-        driver.get(product.url)
-        selector = ".market-listings .market-listing:first-child strong[dir='rtl']"
-
-        def valid_price(browser: object) -> str | bool:
-            element = browser.find_element(By.CSS_SELECTOR, selector)
-            value = element.text.strip()
-            return value if value and value != "—" else False
-
-        text = WebDriverWait(driver, timeout).until(valid_price)
-        assert isinstance(text, str)
-        return Price(name=name, irr=parse_rendered_irr(text))
-    except Exception as exc:
-        if isinstance(exc, NotifierError):
-            raise
-        raise NotifierError(f"Browser fallback failed: {type(exc).__name__}") from exc
-    finally:
-        if driver is not None:
-            driver.quit()
+        ask_price = payload["result"]["symbols"]["USDTTMN"]["stats"]["askPrice"]
+    except (KeyError, TypeError) as exc:
+        raise NotifierError("Wallex USDTTMN ask price is unavailable") from exc
+    toman_per_usdt = parse_decimal(ask_price, "Wallex USDTTMN ask price")
+    rounded_toman = (
+        toman_per_usdt / Decimal("1000")
+    ).to_integral_value(rounding=ROUND_CEILING) * Decimal("1000")
+    irr_per_usdt_cent = rounded_toman / Decimal("10")
+    return [
+        {
+            "top_asset": "USDTCent",
+            "bottom_asset": "IRT",
+            "rate": str(irr_per_usdt_cent),
+        }
+    ]
 
 
 def convert_to_irr(price: object, unit: object, rates: list[dict[str, object]]) -> int:
@@ -234,8 +204,8 @@ def scrape_price(product: Product) -> Price:
     try:
         rates = fetch_rates()
     except NotifierError as websocket_error:
-        print(f"warning: {websocket_error}; using rendered-page fallback", file=sys.stderr)
-        return scrape_rendered_price(product, name)
+        print(f"warning: {websocket_error}; using HTTPS rate fallback", file=sys.stderr)
+        rates = fetch_wallex_rates()
     converted: list[int] = []
     for listing in listings:
         if not isinstance(listing, dict):
