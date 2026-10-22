@@ -10,8 +10,8 @@ orders, wallet access, or delivery-time logic.
 - Uses Pergamer's public live asset-rate WebSocket to convert listing units to
   Iranian rials (IRR), matching the site's displayed listing price. Pergamer
   blocks WebSocket clients from GitHub-hosted runners, so those runs fall back
-  to Wallex's public live `USDTTMN` ask over HTTPS and apply Pergamer's observed
-  whole-thousand-toman quote rounding.
+  to public live USDT/toman HTTPS feeds (Wallex, then Tetherland, then Bitpin)
+  and apply Pergamer's observed whole-thousand-toman quote rounding.
 - Selects the lowest active-seller price (the first row in the sorted lower
   **All active sellers** section). Headline/history prices and wallet balance
   are ignored.

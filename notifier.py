@@ -23,6 +23,8 @@ from websockets.sync.client import connect
 API_BASE = "https://api.pergamer.com"
 WEBSOCKET_URL = "wss://api.pergamer.com/ws/user/"
 WALLEX_MARKETS_URL = "https://api.wallex.ir/v1/markets"
+TETHERLAND_CURRENCIES_URL = "https://api.tetherland.com/currencies"
+BITPIN_MARKETS_URL = "https://api.bitpin.org/v1/mkt/markets/"
 SITE_ORIGIN = "https://pergamer.com"
 USER_AGENT = "Per-Price-Notifier/1.0 (+https://github.com/mortezamim/Per-Price-Notifier)"
 PERSIAN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
@@ -108,11 +110,11 @@ def load_products(path: Path) -> list[Product]:
     return products
 
 
-def read_json(url: str, timeout: int = 20) -> object:
-    request = Request(
-        url,
-        headers={"Accept": "application/json", "Origin": SITE_ORIGIN, "User-Agent": USER_AGENT},
-    )
+def read_json(url: str, timeout: int = 20, origin: str | None = SITE_ORIGIN) -> object:
+    headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+    if origin is not None:
+        headers["Origin"] = origin
+    request = Request(url, headers=headers)
     try:
         with urlopen(request, timeout=timeout) as response:
             return json.load(response)
@@ -144,14 +146,54 @@ def fetch_rates(timeout: int = 15) -> list[dict[str, object]]:
     raise NotifierError("Asset-rate WebSocket returned no rates")
 
 
-def fetch_wallex_rates() -> list[dict[str, object]]:
-    """Mirror Pergamer's whole-thousand-toman USDT quote over runner-safe HTTPS."""
-    payload = read_json(WALLEX_MARKETS_URL)
+def fetch_wallex_toman() -> Decimal:
+    payload = read_json(WALLEX_MARKETS_URL, origin=None)
     try:
         ask_price = payload["result"]["symbols"]["USDTTMN"]["stats"]["askPrice"]
     except (KeyError, TypeError) as exc:
         raise NotifierError("Wallex USDTTMN ask price is unavailable") from exc
-    toman_per_usdt = parse_decimal(ask_price, "Wallex USDTTMN ask price")
+    return parse_decimal(ask_price, "Wallex USDTTMN ask price")
+
+
+def fetch_tetherland_toman() -> Decimal:
+    payload = read_json(TETHERLAND_CURRENCIES_URL, origin=None)
+    try:
+        price = payload["data"]["currencies"]["USDT"]["price"]
+    except (KeyError, TypeError) as exc:
+        raise NotifierError("Tetherland USDT price is unavailable") from exc
+    return parse_decimal(price, "Tetherland USDT price")
+
+
+def fetch_bitpin_toman() -> Decimal:
+    payload = read_json(BITPIN_MARKETS_URL, origin=None)
+    try:
+        markets = payload["results"]
+    except (KeyError, TypeError) as exc:
+        raise NotifierError("Bitpin markets are unavailable") from exc
+    if not isinstance(markets, list):
+        raise NotifierError("Bitpin markets are unavailable")
+    for market in markets:
+        if isinstance(market, dict) and market.get("code") == "USDT_IRT":
+            return parse_decimal(market.get("price"), "Bitpin USDT/IRT price")
+    raise NotifierError("Bitpin USDT/IRT price is unavailable")
+
+
+def fetch_https_rates() -> list[dict[str, object]]:
+    """Mirror Pergamer's whole-thousand-toman USDT quote over runner-safe HTTPS."""
+    failures: list[str] = []
+    toman_per_usdt = None
+    for name, provider in (
+        ("Wallex", fetch_wallex_toman),
+        ("Tetherland", fetch_tetherland_toman),
+        ("Bitpin", fetch_bitpin_toman),
+    ):
+        try:
+            toman_per_usdt = provider()
+            break
+        except NotifierError as exc:
+            failures.append(f"{name}: {exc}")
+    if toman_per_usdt is None:
+        raise NotifierError("All HTTPS rate providers failed (" + "; ".join(failures) + ")")
     rounded_toman = (
         toman_per_usdt / Decimal("1000")
     ).to_integral_value(rounding=ROUND_CEILING) * Decimal("1000")
@@ -205,7 +247,7 @@ def scrape_price(product: Product) -> Price:
         rates = fetch_rates()
     except NotifierError as websocket_error:
         print(f"warning: {websocket_error}; using HTTPS rate fallback", file=sys.stderr)
-        rates = fetch_wallex_rates()
+        rates = fetch_https_rates()
     converted: list[int] = []
     for listing in listings:
         if not isinstance(listing, dict):

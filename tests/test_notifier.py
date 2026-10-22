@@ -39,9 +39,15 @@ class ParserTests(unittest.TestCase):
                 }
             }
         }
-        rates = notifier.fetch_wallex_rates()
+        rates = notifier.fetch_https_rates()
         self.assertEqual(rates[0]["rate"], "26700")
         self.assertEqual(notifier.convert_to_irr("133", "USDTCent", rates), 3551100)
+
+    @patch("notifier.fetch_wallex_toman", side_effect=notifier.NotifierError("blocked"))
+    @patch("notifier.fetch_tetherland_toman", return_value=notifier.Decimal("266550"))
+    def test_https_rate_uses_backup_provider(self, _, __):
+        rates = notifier.fetch_https_rates()
+        self.assertEqual(rates[0]["rate"], "26700")
 
 
 class StateTests(unittest.TestCase):
