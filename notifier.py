@@ -384,12 +384,25 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="read live prices without Telegram or state changes",
     )
+    parser.add_argument(
+        "--test-telegram",
+        action="store_true",
+        help="send one Telegram delivery health-check message",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
+        if args.test_telegram:
+            send_telegram(
+                "Per Price Notifier test\nTelegram delivery is working.",
+                os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+                os.environ.get("TELEGRAM_CHAT_ID", ""),
+            )
+            print("telegram test: delivered")
+            return 0
         products = load_products(args.products)
         if args.check_only:
             for product in products:

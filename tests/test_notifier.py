@@ -131,5 +131,26 @@ class StateTests(unittest.TestCase):
             self.run_price(3551100)
 
 
+class CommandTests(unittest.TestCase):
+    @patch("notifier.send_telegram")
+    @patch("notifier.parse_args")
+    @patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "token", "TELEGRAM_CHAT_ID": "-1001"})
+    def test_telegram_health_check(self, parse_args, send_telegram):
+        parse_args.return_value = type(
+            "Args",
+            (),
+            {
+                "test_telegram": True,
+                "check_only": False,
+                "products": Path("unused"),
+                "state": Path("unused"),
+            },
+        )()
+        self.assertEqual(notifier.main(), 0)
+        send_telegram.assert_called_once_with(
+            "Per Price Notifier test\nTelegram delivery is working.", "token", "-1001"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

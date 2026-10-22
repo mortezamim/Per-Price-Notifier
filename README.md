@@ -70,6 +70,10 @@ use `getUpdates`; this project will not remove or modify an existing webhook.
 runs. GitHub schedules can start late during load. Standard GitHub-hosted runners
 are free for public repositories under GitHub's current Actions policy.
 
+Manual runs offer `test_telegram`. Enabling it sends one clearly labeled health
+check to the configured group before the normal price check. Leave it disabled
+for ordinary runs.
+
 The workflow uses one serialized concurrency group and writes `prices.json` to
 a dedicated `price-state` branch. This survives ephemeral runners and does not
 depend on disposable Actions caches. The scheduled workflow becomes active only

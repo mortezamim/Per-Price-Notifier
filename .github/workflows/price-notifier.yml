@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "7,37 * * * *"
   workflow_dispatch:
+    inputs:
+      test_telegram:
+        description: "Send one Telegram delivery health-check message"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -28,6 +34,13 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Verify Telegram delivery
+        if: github.event_name == 'workflow_dispatch' && inputs.test_telegram == true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python notifier.py --test-telegram
 
       - name: Check out durable state
         shell: bash
