@@ -24,7 +24,7 @@ jobs:
           echo "Run discover_chat.py locally for private discovery."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Show group title and numeric chat ID only
         env:

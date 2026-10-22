@@ -7,6 +7,7 @@ import argparse
 import html
 import json
 import os
+import re
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -135,8 +136,63 @@ def fetch_rates(timeout: int = 15) -> list[dict[str, object]]:
                 ):
                     return message["asset_rates"]
     except Exception as exc:
-        raise NotifierError(f"Asset-rate WebSocket failed: {type(exc).__name__}") from exc
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        detail = f" HTTP {status}" if status is not None else ""
+        raise NotifierError(
+            f"Asset-rate WebSocket failed: {type(exc).__name__}{detail}"
+        ) from exc
     raise NotifierError("Asset-rate WebSocket returned no rates")
+
+
+def parse_rendered_irr(text: str) -> int:
+    normalized = normalize_number(text)
+    numbers = re.findall(r"[0-9]+", normalized)
+    if len(numbers) != 1:
+        raise NotifierError(f"Rendered listing price is invalid: {text!r}")
+    value = int(numbers[0])
+    if value <= 0:
+        raise NotifierError("Rendered listing price is not positive")
+    return value
+
+
+def scrape_rendered_price(product: Product, name: str, timeout: int = 45) -> Price:
+    """Read first rendered active-seller row through Chrome when WS clients are blocked."""
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+    except ImportError as exc:
+        raise NotifierError("Selenium browser fallback is unavailable") from exc
+
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--lang=fa-IR")
+    options.add_argument("--window-size=1280,1200")
+    driver = None
+    try:
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(timeout)
+        driver.get(product.url)
+        selector = ".market-listings .market-listing:first-child strong[dir='rtl']"
+
+        def valid_price(browser: object) -> str | bool:
+            element = browser.find_element(By.CSS_SELECTOR, selector)
+            value = element.text.strip()
+            return value if value and value != "—" else False
+
+        text = WebDriverWait(driver, timeout).until(valid_price)
+        assert isinstance(text, str)
+        return Price(name=name, irr=parse_rendered_irr(text))
+    except Exception as exc:
+        if isinstance(exc, NotifierError):
+            raise
+        raise NotifierError(f"Browser fallback failed: {type(exc).__name__}") from exc
+    finally:
+        if driver is not None:
+            driver.quit()
 
 
 def convert_to_irr(price: object, unit: object, rates: list[dict[str, object]]) -> int:
@@ -174,7 +230,12 @@ def scrape_price(product: Product) -> Price:
     listings = payload.get("listings")
     if not isinstance(listings, list) or not listings:
         raise NotifierError("No active seller listings found")
-    rates = fetch_rates()
+    name = str(payload.get("market_name") or payload.get("market_hash_name") or product.market_hash_name)
+    try:
+        rates = fetch_rates()
+    except NotifierError as websocket_error:
+        print(f"warning: {websocket_error}; using rendered-page fallback", file=sys.stderr)
+        return scrape_rendered_price(product, name)
     converted: list[int] = []
     for listing in listings:
         if not isinstance(listing, dict):
@@ -185,7 +246,6 @@ def scrape_price(product: Product) -> Price:
             continue
     if not converted:
         raise NotifierError("No active listing had a valid IRR price")
-    name = str(payload.get("market_name") or payload.get("market_hash_name") or product.market_hash_name)
     return Price(name=name, irr=min(converted))
 
 

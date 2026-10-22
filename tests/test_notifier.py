@@ -30,6 +30,9 @@ class ParserTests(unittest.TestCase):
         rates = [{"top_asset": "USDTCent", "bottom_asset": "IRT", "rate": "26700"}]
         self.assertEqual(notifier.convert_to_irr("133", "USDTCent", rates), 3551100)
 
+    def test_parses_rendered_irr(self):
+        self.assertEqual(notifier.parse_rendered_irr("۳٬۵۵۱٬۱۰۰ ریال"), 3551100)
+
 
 class StateTests(unittest.TestCase):
     def setUp(self):
